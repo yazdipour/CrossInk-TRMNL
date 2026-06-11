@@ -25,6 +25,7 @@
 #include "MappedInputManager.h"
 #include "AchievementsStore.h"
 #include "OpdsServerStore.h"
+#include "TrmnlSettingsStore.h"
 #include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontGlobals.h"
@@ -410,6 +411,13 @@ void setup() {
   } else {
     BootRecovery::enterStage(BootRecovery::BootStage::OPDS);
     OPDS_STORE.loadFromFile();
+  }
+
+  if (BootRecovery::shouldSkipTrmnl()) {
+    logSkip("Skipping TRMNL store load due to recovery mode");
+  } else {
+    BootRecovery::enterStage(BootRecovery::BootStage::Trmnl);
+    TRMNL_STORE.loadFromFile();
   }
 
   BootRecovery::enterStage(BootRecovery::BootStage::UiTheme);

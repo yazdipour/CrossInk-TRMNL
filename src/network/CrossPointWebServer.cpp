@@ -19,6 +19,7 @@
 #include "KOReaderCredentialStore.h"
 #include "OpdsServerStore.h"
 #include "ReadingStatsStore.h"
+#include "TrmnlSettingsStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontGlobals.h"
 #include "WebDAVHandler.h"
@@ -238,7 +239,8 @@ constexpr StrId OPT_SLEEP_SCREEN[] = {StrId::STR_DARK,
                                       StrId::STR_COVER_STATS,
                                       StrId::STR_COVER_STATS_V2,
                                       StrId::STR_CUSTOM_STATS,
-                                      StrId::STR_CUSTOM_STATS_V2};
+                                      StrId::STR_CUSTOM_STATS_V2,
+                                      StrId::STR_TRMNL};
 constexpr StrId OPT_FIT_CROP[] = {StrId::STR_FIT, StrId::STR_CROP};
 constexpr StrId OPT_SLEEP_FILTER[] = {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED};
 constexpr StrId OPT_HIDE_BATTERY[] = {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS};
@@ -550,6 +552,10 @@ void CrossPointWebServer::begin() {
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
   server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+
+  // TRMNL endpoints
+  server->on("/api/trmnl", HTTP_GET, [this] { handleGetTrmnl(); });
+  server->on("/api/trmnl", HTTP_POST, [this] { handlePostTrmnl(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -2075,6 +2081,51 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
   server->send(200, "text/plain", "OK");
+}
+
+// ---- TRMNL Settings API ----
+
+void CrossPointWebServer::handleGetTrmnl() const {
+  JsonDocument doc;
+  doc["serverUrl"] = TRMNL_STORE.getServerUrl();
+  doc["deviceId"] = TRMNL_STORE.getDeviceId();
+  doc["orientation"] = TRMNL_STORE.getOrientation();
+  doc["hasApiKey"] = !TRMNL_STORE.getApiKey().empty();
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+  LOG_DBG("WEB", "Served TRMNL settings API");
+}
+
+void CrossPointWebServer::handlePostTrmnl() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  TRMNL_STORE.setServerUrl(doc["serverUrl"] | std::string(""));
+  TRMNL_STORE.setDeviceId(doc["deviceId"] | std::string(""));
+  const uint8_t orientation = doc["orientation"] | static_cast<uint8_t>(0);
+  TRMNL_STORE.setOrientation(orientation < CrossPointSettings::TRMNL_ORIENTATION_COUNT ? orientation : 0);
+
+  if (!doc["apiKey"].isNull()) {
+    TRMNL_STORE.setApiKey(doc["apiKey"] | std::string(""));
+  }
+
+  if (TRMNL_STORE.saveToFile()) {
+    server->send(200, "text/plain", "OK");
+  } else {
+    server->send(500, "text/plain", "Failed to save settings");
+  }
 }
 
 // WebSocket callback trampoline

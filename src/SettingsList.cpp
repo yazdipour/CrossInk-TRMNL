@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
+#include "TrmnlSettingsStore.h"
 #include "util/ShortcutRegistry.h"
 
 const std::vector<SettingInfo>& getSettingsList() {
@@ -16,7 +17,8 @@ const std::vector<SettingInfo>& getSettingsList() {
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                           {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
                            StrId::STR_COVER_CUSTOM, StrId::STR_READING_DASHBOARD, StrId::STR_COVER_STATS,
-                           StrId::STR_COVER_STATS_V2, StrId::STR_CUSTOM_STATS, StrId::STR_CUSTOM_STATS_V2},
+                           StrId::STR_COVER_STATS_V2, StrId::STR_CUSTOM_STATS, StrId::STR_CUSTOM_STATS_V2,
+                           StrId::STR_TRMNL},
                           "sleepScreen", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                           {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
@@ -218,6 +220,37 @@ const std::vector<SettingInfo>& getSettingsList() {
         SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                           {StrId::STR_AUTHOR_TITLE, StrId::STR_TITLE_AUTHOR}, "opdsFilenameFormat",
                           StrId::STR_KOREADER_SYNC),
+        // --- TRMNL Settings (web-only; device UI uses TrmnlSettingsActivity) ---
+        SettingInfo::DynamicString(
+            StrId::STR_TRMNL_SERVER_URL, [] { return TRMNL_STORE.getServerUrl(); },
+            [](const std::string& v) {
+              TRMNL_STORE.setServerUrl(v);
+              TRMNL_STORE.saveToFile();
+            },
+            "trmnlServerUrl", StrId::STR_TRMNL_SETTINGS),
+        SettingInfo::DynamicString(
+            StrId::STR_TRMNL_API_KEY, [] { return TRMNL_STORE.getApiKey(); },
+            [](const std::string& v) {
+              TRMNL_STORE.setApiKey(v);
+              TRMNL_STORE.saveToFile();
+            },
+            "trmnlApiKey", StrId::STR_TRMNL_SETTINGS)
+            .withObfuscated(),
+        SettingInfo::DynamicString(
+            StrId::STR_TRMNL_DEVICE_ID, [] { return TRMNL_STORE.getDeviceId(); },
+            [](const std::string& v) {
+              TRMNL_STORE.setDeviceId(v);
+              TRMNL_STORE.saveToFile();
+            },
+            "trmnlDeviceId", StrId::STR_TRMNL_SETTINGS),
+        SettingInfo::DynamicEnum(
+            StrId::STR_TRMNL_ORIENTATION, {StrId::STR_TRMNL_HORIZONTAL, StrId::STR_TRMNL_VERTICAL},
+            [] { return TRMNL_STORE.getOrientation(); },
+            [](uint8_t v) {
+              TRMNL_STORE.setOrientation(v);
+              TRMNL_STORE.saveToFile();
+            },
+            "trmnlOrientation", StrId::STR_TRMNL_SETTINGS),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

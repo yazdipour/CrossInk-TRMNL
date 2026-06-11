@@ -10,6 +10,7 @@ enum class BootStage : uint8_t {
   Language,
   KOReader,
   OPDS,
+  Trmnl,
   UiTheme,
   DisplayAndFonts,
   State,
@@ -36,6 +37,7 @@ bool shouldSkipSettings();
 bool shouldSkipLanguage();
 bool shouldSkipKOReader();
 bool shouldSkipOPDS();
+bool shouldSkipTrmnl();
 bool shouldSkipState();
 bool shouldSkipReadingStats();
 bool shouldSkipRecentBooks();

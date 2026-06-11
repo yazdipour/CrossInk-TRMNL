@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "trmnl/TrmnlSleepClient.h"
 #include "../Activity.h"
 
 class Bitmap;
@@ -21,6 +22,9 @@ class SleepActivity final : public Activity {
   void renderCustomStatsSleepScreen(bool footerOnly = false) const;
   void renderBitmapSleepScreen(const Bitmap& bitmap, const std::string& sourcePath = "") const;
   bool renderPngSleepScreen(const std::string& sourcePath) const;
+  bool renderTrmnlCachedImage() const;
+  void renderTrmnlSleepScreen() const;
+  void renderTrmnlErrorScreen(TrmnlSleepClient::FetchResult result) const;
   void renderBlankSleepScreen() const;
   bool resolveLastBookCoverPath(std::string& coverBmpPath) const;
 };

@@ -19,6 +19,7 @@
 #include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
+#include "TrmnlSettingsStore.h"
 #include "WifiCredentialStore.h"
 #include "util/BookIdentity.h"
 #include "util/CprVcodexLogs.h"
@@ -298,6 +299,24 @@ bool loadSettingsDirect(CrossPointSettings& s, const JsonDocument& doc, bool* ne
 
   if (doc["statusBarChapterPageCount"].isNull()) {
     applyLegacyStatusBarSettings(s);
+  }
+
+  if (!doc["trmnlServerUrl"].isNull() || !doc["trmnlApiKey"].isNull() || !doc["trmnlDeviceId"].isNull() || !doc["trmnlApiKey_obf"].isNull()) {
+    TRMNL_STORE.setServerUrl(doc["trmnlServerUrl"] | "");
+    bool ok = false;
+    std::string apiKey = obfuscation::deobfuscateFromBase64(doc["trmnlApiKey_obf"] | "", &ok);
+    if (!ok || apiKey.empty()) {
+      apiKey = doc["trmnlApiKey"] | "";
+    }
+    TRMNL_STORE.setApiKey(apiKey);
+    TRMNL_STORE.setDeviceId(doc["trmnlDeviceId"] | "");
+    TRMNL_STORE.setOrientation(doc["trmnlOrientation"] | 0);
+    if (TRMNL_STORE.saveToFile()) {
+      LOG_DBG("TRM", "Migrated TRMNL settings from settings.json directly");
+    } else {
+      LOG_ERR("TRM", "Migration save failed; legacy fields remain in settings.json");
+    }
+    if (needsResave) *needsResave = true;
   }
 
   loadEnum("sleepScreen", s.sleepScreen, CrossPointSettings::SLEEP_SCREEN_MODE_COUNT);
@@ -1636,5 +1655,39 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- TrmnlSettingsStore ----
+
+bool JsonSettingsIO::saveTrmnl(const TrmnlSettingsStore& store, const char* path) {
+  JsonDocument doc;
+  doc["serverUrl"] = store.getServerUrl();
+  doc["apiKey_obf"] = obfuscation::obfuscateToBase64(store.getApiKey());
+  doc["deviceId"] = store.getDeviceId();
+  doc["orientation"] = store.getOrientation();
+  return saveJsonDocumentToFile("TRM", path, doc);
+}
+
+bool JsonSettingsIO::loadTrmnl(TrmnlSettingsStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("TRM", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  store.serverUrl = doc["serverUrl"] | std::string("");
+  bool ok = false;
+  store.apiKey = obfuscation::deobfuscateFromBase64(doc["apiKey_obf"] | "", &ok);
+  if (!ok || store.apiKey.empty()) {
+    store.apiKey = doc["apiKey"] | std::string("");
+    if (!store.apiKey.empty() && needsResave) *needsResave = true;
+  }
+  store.deviceId = doc["deviceId"] | std::string("");
+  store.orientation = doc["orientation"] | static_cast<uint8_t>(0);
+
+  LOG_DBG("TRM", "Loaded TRMNL settings from file");
   return true;
 }

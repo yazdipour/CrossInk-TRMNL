@@ -27,6 +27,8 @@
 #include "util/ReadingStatsAnalytics.h"
 #include "util/SleepImageUtils.h"
 #include "util/SleepScreenCache.h"
+#include "TrmnlSettingsStore.h"
+#include "trmnl/TrmnlSleepClient.h"
 
 namespace {
 bool canUseSleepCache(const Bitmap& bitmap) {
@@ -65,6 +67,35 @@ std::string formatBookTitleFromPath(const std::string& path) {
     name = name.substr(0, dot);
   }
   return name.empty() ? std::string(tr(STR_READING_TIME)) : name;
+}
+
+StrId trmnlFetchResultTextId(const TrmnlSleepClient::FetchResult result) {
+  switch (result) {
+    case TrmnlSleepClient::FetchResult::Ok:
+      return StrId::STR_TRMNL_ERROR_OK;
+    case TrmnlSleepClient::FetchResult::MissingConfig:
+      return StrId::STR_TRMNL_ERROR_MISSING_CONFIG;
+    case TrmnlSleepClient::FetchResult::NoWifiCredential:
+      return StrId::STR_TRMNL_ERROR_NO_WIFI;
+    case TrmnlSleepClient::FetchResult::WifiConnectFailed:
+      return StrId::STR_TRMNL_ERROR_WIFI_CONNECT;
+    case TrmnlSleepClient::FetchResult::DisplayFetchFailed:
+      return StrId::STR_TRMNL_ERROR_DISPLAY_FETCH;
+    case TrmnlSleepClient::FetchResult::DisplayJsonInvalid:
+      return StrId::STR_TRMNL_ERROR_JSON_INVALID;
+    case TrmnlSleepClient::FetchResult::DisplayImageMissing:
+      return StrId::STR_TRMNL_ERROR_IMAGE_MISSING;
+    case TrmnlSleepClient::FetchResult::ImageDownloadFailed:
+      return StrId::STR_TRMNL_ERROR_IMAGE_DOWNLOAD;
+    case TrmnlSleepClient::FetchResult::ImageInvalid:
+      return StrId::STR_TRMNL_ERROR_IMAGE_INVALID;
+    case TrmnlSleepClient::FetchResult::CacheWriteFailed:
+      return StrId::STR_TRMNL_ERROR_CACHE_WRITE;
+    case TrmnlSleepClient::FetchResult::CacheRenderFailed:
+      return StrId::STR_TRMNL_ERROR_CACHE_RENDER;
+    default:
+      return StrId::STR_TRMNL_ERROR_UNKNOWN;
+  }
 }
 
 const ReadingBookStats* getCurrentSleepBook() {
@@ -664,6 +695,9 @@ void SleepActivity::onEnter() {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM_STATS_V2):
       renderCustomStatsSleepScreen(true);
       break;
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TRMNL):
+      renderTrmnlSleepScreen();
+      break;
     default:
       renderDefaultSleepScreen();
       break;
@@ -835,6 +869,92 @@ bool SleepActivity::renderPngSleepScreen(const std::string& sourcePath) const {
 
   displaySleepBuffer(renderer);
   return true;
+}
+
+bool SleepActivity::renderTrmnlCachedImage() const {
+  FsFile file;
+  if (!Storage.openFileForRead("TRM", TrmnlSleepClient::CACHE_BMP, file)) {
+    LOG_DBG("SLP", "No TRMNL cache: %s", TrmnlSleepClient::CACHE_BMP);
+    return false;
+  }
+
+  Bitmap bitmap(file, true);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    file.close();
+    return false;
+  }
+
+  renderBitmapSleepScreen(bitmap, TrmnlSleepClient::CACHE_BMP);
+  file.close();
+  return true;
+}
+
+void SleepActivity::renderTrmnlSleepScreen() const {
+  const auto trmnlOrientation = TRMNL_STORE.getOrientation() == CrossPointSettings::TRMNL_PORTRAIT
+                                    ? trmnl::Orientation::Portrait
+                                    : trmnl::Orientation::Landscape;
+  renderer.setOrientation(trmnlOrientation == trmnl::Orientation::Portrait
+                              ? GfxRenderer::Orientation::Portrait
+                              : GfxRenderer::Orientation::LandscapeCounterClockwise);
+  renderer.requestNextRefresh(HalDisplay::FULL_REFRESH);
+  const TrmnlSleepClient::Config config{TRMNL_STORE.getServerUrl().c_str(), TRMNL_STORE.getApiKey().c_str(), TRMNL_STORE.getDeviceId().c_str(),
+                                        trmnl::displaySizeFor(trmnlOrientation), trmnl::modelFor(trmnlOrientation)};
+  const TrmnlSleepClient::FetchResult fetchResult = TrmnlSleepClient::fetchLatest(config);
+  if (fetchResult != TrmnlSleepClient::FetchResult::Ok) {
+    if (!renderTrmnlCachedImage()) {
+      renderTrmnlErrorScreen(fetchResult);
+    }
+    return;
+  }
+  if (!renderTrmnlCachedImage()) {
+    renderTrmnlErrorScreen(TrmnlSleepClient::FetchResult::CacheRenderFailed);
+  }
+}
+
+void SleepActivity::renderTrmnlErrorScreen(const TrmnlSleepClient::FetchResult result) const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const int side = std::max(24, pageWidth / 16);
+  const int contentWidth = pageWidth - side * 2;
+  int y = std::max(30, pageHeight / 8);
+
+  renderer.clearScreen();
+  renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_TRMNL_ERROR_TITLE), true, EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(UI_12_FONT_ID) + 18;
+
+  renderer.drawText(UI_10_FONT_ID, side, y, tr(STR_TRMNL_ERROR_REASON), true, EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(UI_10_FONT_ID) + 6;
+  drawTextClipped(renderer, UI_10_FONT_ID, side, y, I18N.get(trmnlFetchResultTextId(result)), contentWidth, true,
+                  EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(UI_10_FONT_ID) + 22;
+
+  // Configuration Info
+  renderer.drawText(UI_10_FONT_ID, side, y, tr(STR_TRMNL_ERROR_CONFIG), true, EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(UI_10_FONT_ID) + 6;
+
+  std::string serverUrlText = std::string(tr(STR_TRMNL_SERVER_URL)) + ": " + TRMNL_STORE.getServerUrl();
+  drawTextClipped(renderer, SMALL_FONT_ID, side, y, serverUrlText, contentWidth);
+  y += renderer.getLineHeight(SMALL_FONT_ID) + 6;
+
+  std::string deviceIdText = std::string(tr(STR_TRMNL_DEVICE_ID)) + ": " + TRMNL_STORE.getDeviceId();
+  drawTextClipped(renderer, SMALL_FONT_ID, side, y, deviceIdText, contentWidth);
+  y += renderer.getLineHeight(SMALL_FONT_ID) + 6;
+
+  std::string apiKeyStatusText = std::string(tr(STR_TRMNL_API_KEY)) + ": " + (TRMNL_STORE.getApiKey().empty() ? tr(STR_NOT_SET) : tr(STR_SET));
+  drawTextClipped(renderer, SMALL_FONT_ID, side, y, apiKeyStatusText, contentWidth);
+  y += renderer.getLineHeight(SMALL_FONT_ID) + 22;
+
+  const char* hints[] = {
+      tr(STR_TRMNL_ERROR_HINT_SETTINGS),
+      tr(STR_TRMNL_ERROR_HINT_SERVER),
+      tr(STR_TRMNL_ERROR_HINT_SERIAL),
+  };
+  for (const char* hint : hints) {
+    drawTextClipped(renderer, SMALL_FONT_ID, side, y, hint, contentWidth);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + 8;
+  }
+
+  displaySleepBuffer(renderer);
 }
 
 bool SleepActivity::resolveLastBookCoverPath(std::string& coverBmpPath) const {

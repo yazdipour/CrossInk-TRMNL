@@ -54,10 +54,18 @@ class FileWriteStream final : public Stream {
   HttpDownloader::ProgressCallback progress_;
   bool* cancelFlag_;
 };
+
+void addHeaders(HTTPClient& http, const HttpDownloader::Header* headers, const size_t headerCount) {
+  for (size_t i = 0; i < headerCount; i++) {
+    if (headers[i].name && headers[i].value) {
+      http.addHeader(headers[i].name, headers[i].value);
+    }
+  }
+}
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const Header* headers, const size_t headerCount) {
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
@@ -72,7 +80,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(10000);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  addHeaders(http, headers, headerCount);
 
   if (!username.empty() && !password.empty()) {
     std::string credentials = username + ":" + password;
@@ -96,9 +106,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const Header* headers, const size_t headerCount) {
   StreamString stream;
-  if (!fetchUrl(url, stream, username, password)) {
+  if (!fetchUrl(url, stream, username, password, headers, headerCount)) {
     return false;
   }
   outContent = stream.c_str();
@@ -107,7 +117,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
-                                                             const std::string& username, const std::string& password) {
+                                                             const std::string& username, const std::string& password,
+                                                             const Header* headers, const size_t headerCount) {
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
@@ -123,7 +134,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(10000);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  addHeaders(http, headers, headerCount);
 
   if (!username.empty() && !password.empty()) {
     std::string credentials = username + ":" + password;

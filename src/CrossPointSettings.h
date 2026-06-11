@@ -30,6 +30,7 @@ class CrossPointSettings {
     COVER_STATS_V2 = 8,
     CUSTOM_STATS = 9,
     CUSTOM_STATS_V2 = 10,
+    TRMNL = 11,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -39,6 +40,7 @@ class CrossPointSettings {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum TRMNL_ORIENTATION { TRMNL_LANDSCAPE = 0, TRMNL_PORTRAIT = 1, TRMNL_ORIENTATION_COUNT };
 
   // Status bar enum - legacy
   enum STATUS_BAR_MODE {

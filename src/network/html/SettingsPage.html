@@ -302,6 +302,8 @@
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
   </div>
 
+  <div id="trmnl-container"></div>
+
   <div id="opds-container"></div>
 
   <div class="card">
@@ -486,6 +488,8 @@
   }
 
   loadSettings().then(function() {
+    return loadTrmnl();
+  }).then(function() {
     return loadOpdsServers();
   });
 
@@ -598,6 +602,75 @@
       if (!resp.ok) throw new Error(await resp.text());
       showMessage('OPDS server deleted', false);
       await loadOpdsServers();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  // --- TRMNL Management ---
+  async function loadTrmnl() {
+    try {
+      const resp = await fetch('/api/trmnl');
+      if (!resp.ok) throw new Error('Failed to load');
+      const data = await resp.json();
+      renderTrmnlSection(data);
+    } catch (e) {
+      console.error('TRMNL load error:', e);
+    }
+  }
+
+  function renderTrmnlSection(data) {
+    const container = document.getElementById('trmnl-container');
+    const optLandscape = data.orientation === 0 ? 'selected' : '';
+    const optPortrait = data.orientation === 1 ? 'selected' : '';
+    
+    let html = '<div class="card"><h2>TRMNL Settings</h2>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Server URL</span>' +
+        '<span class="setting-control"><input type="text" id="trmnl-url" value="' + escapeHtml(data.serverUrl || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">API Key</span>' +
+        '<span class="setting-control"><input type="password" id="trmnl-key" placeholder="' + (data.hasApiKey ? '(unchanged)' : '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Device ID</span>' +
+        '<span class="setting-control"><input type="text" id="trmnl-device" value="' + escapeHtml(data.deviceId || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Orientation</span>' +
+        '<span class="setting-control">' +
+          '<select id="trmnl-orientation">' +
+            '<option value="0" ' + optLandscape + '>Horizontal</option>' +
+            '<option value="1" ' + optPortrait + '>Vertical</option>' +
+          '</select>' +
+        '</span>' +
+      '</div>' +
+      '<div class="opds-actions">' +
+        '<button class="btn-small btn-save-server" onclick="saveTrmnlSettings()">Save TRMNL</button>' +
+      '</div>' +
+    '</div>';
+    container.innerHTML = html;
+  }
+
+  async function saveTrmnlSettings() {
+    const data = {
+      serverUrl: document.getElementById('trmnl-url').value,
+      deviceId: document.getElementById('trmnl-device').value,
+      orientation: parseInt(document.getElementById('trmnl-orientation').value, 10)
+    };
+    const key = document.getElementById('trmnl-key').value;
+    if (key) data.apiKey = key;
+
+    try {
+      const resp = await fetch('/api/trmnl', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('TRMNL settings saved!', false);
+      await loadTrmnl();
     } catch (e) {
       showMessage('Error: ' + e.message, true);
     }

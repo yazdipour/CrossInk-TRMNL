@@ -44,6 +44,7 @@
 #include "activities/apps/ScreenCleanActivity.h"
 #include "activities/apps/SleepAppActivity.h"
 #include "activities/apps/SyncDayActivity.h"
+#include "TrmnlSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -65,7 +66,8 @@ const std::vector<SettingInfo>& getDeviceDisplaySettings() {
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                         {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
                          StrId::STR_COVER_CUSTOM, StrId::STR_READING_DASHBOARD, StrId::STR_COVER_STATS,
-                         StrId::STR_COVER_STATS_V2, StrId::STR_CUSTOM_STATS, StrId::STR_CUSTOM_STATS_V2}),
+                         StrId::STR_COVER_STATS_V2, StrId::STR_CUSTOM_STATS, StrId::STR_CUSTOM_STATS_V2,
+                         StrId::STR_TRMNL}),
       SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                         {StrId::STR_FIT, StrId::STR_CROP}),
       SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
@@ -150,6 +152,7 @@ const std::vector<SettingInfo>& getDeviceSystemSettings() {
                         {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15, StrId::STR_MIN_30}),
       SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles),
       SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network),
+      SettingInfo::Action(StrId::STR_TRMNL_SETTINGS, SettingAction::TrmnlSettings),
       SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync),
       SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                         {StrId::STR_AUTHOR_TITLE, StrId::STR_TITLE_AUTHOR}),
@@ -172,6 +175,7 @@ const std::vector<SettingInfo>& getDeviceOnlyControlSettings() {
 const std::vector<SettingInfo>& getDeviceOnlySystemSettings() {
   static const std::vector<SettingInfo> settings = {
       SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network),
+      SettingInfo::Action(StrId::STR_TRMNL_SETTINGS, SettingAction::TrmnlSettings),
       SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync),
       SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser),
       SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache),
@@ -642,6 +646,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        break;
+      case SettingAction::TrmnlSettings:
+        startActivityForResult(std::make_unique<TrmnlSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);

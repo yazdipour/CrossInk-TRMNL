@@ -1,3 +1,15 @@
+# CrossXT - Yet Another Crosspoint Fork
+
+> [Main fork of CPR-vCodex](https://github.com/yazdipour/CrossXT/tree/main-vcodex)
+  - TRMNL Lock Screen (I used https://github.com/yazdipour/byos_next as Server)
+  - OPDS Downloads going to specified directory instead of root
+> [Feature branch of CrossInk](https://github.com/yazdipour/CrossXT/tree/development)
+  - TRMNL Lock Screen (I used https://github.com/yazdipour/byos_next as Server)
+
+![CrossXT with TRMNL Lock Screen](https://github.com/yazdipour/byos_next/raw/main/docs/screenshots/xteink-x4.jpg)
+
+---
+
 > **CPR-vCodex is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)**, focused on improving reading consistency, long-term reading habits, and overall reader experience without sacrificing simplicity or performance.
 >
 > Instead of only tracking progress, this fork focuses on the full reading journey — consistency, habits, milestones, statistics, customization, and personal reading identity.

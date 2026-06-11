@@ -140,4 +140,8 @@ class CrossPointWebServer {
   void handleGetOpdsServers() const;
   void handlePostOpdsServer();
   void handleDeleteOpdsServer();
+
+  // TRMNL handlers
+  void handleGetTrmnl() const;
+  void handlePostTrmnl();
 };
