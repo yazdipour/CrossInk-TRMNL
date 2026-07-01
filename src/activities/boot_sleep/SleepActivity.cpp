@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <PNGdec.h>
+#include <PngGraySample.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -171,13 +172,18 @@ int pngOverlayDraw(PNGDRAW* pDraw) {
           }
           break;
         }
-        case PNG_PIXEL_GRAYSCALE:
-          gray = pixels[srcX];
+        case PNG_PIXEL_GRAYSCALE: {
+          // TRMNL serves 2-bit grayscale, which the old 8-bit-only read (pixels[srcX])
+          // sheared horizontally by ~4x. pngUnpackGraySample() handles every valid PNG
+          // grayscale bit depth (1/2/4/8/16); shared with PngToFramebufferConverter.cpp
+          // so the two PNG consumers can't drift apart.
+          gray = pngUnpackGraySample(pixels, srcX, pDraw->iBpp);
           // tRNS color-key: transparent gray value stored in low byte
           if (ctx->transparentColor >= 0 && gray == (uint8_t)(ctx->transparentColor & 0xFF)) {
             alpha = 0;
           }
           break;
+        }
         case PNG_PIXEL_INDEXED:
           if (pDraw->pPalette) {
             const uint8_t idx = pixels[srcX];

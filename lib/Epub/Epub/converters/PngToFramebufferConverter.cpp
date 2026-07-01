@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <MemoryBudget.h>
 #include <PNGdec.h>
+#include <PngGraySample.h>
 
 #include <cstdlib>
 #include <new>
@@ -106,10 +107,24 @@ int requiredPngInternalBufferBytes(int srcWidth, int pixelType) {
 // Convert entire source line to grayscale with alpha blending to white background.
 // For indexed PNGs with tRNS chunk, alpha values are stored at palette[768] onwards.
 // Processing the whole line at once improves cache locality and reduces per-pixel overhead.
-void convertLineToGray(uint8_t* pPixels, uint8_t* grayLine, int width, int pixelType, uint8_t* palette, int hasAlpha) {
+void convertLineToGray(uint8_t* pPixels, uint8_t* grayLine, int width, int pixelType, uint8_t* palette, int hasAlpha,
+                       int bpp) {
   switch (pixelType) {
     case PNG_PIXEL_GRAYSCALE:
-      memcpy(grayLine, pPixels, width);
+      if (bpp == 8) {
+        // Fast bulk path for the common case -- see the file-level comment above
+        // on why processing the whole line at once matters here.
+        memcpy(grayLine, pPixels, width);
+      } else {
+        // Sub-8-bit grayscale is packed MSB-first (8/4/2 samples per byte); 16-bit
+        // grayscale is 2 bytes/sample, big-endian. pngUnpackGraySample() unpacks
+        // and scales any valid PNG grayscale depth; shared with SleepActivity.cpp's
+        // pngOverlayDraw() so the two PNG consumers can't drift apart. The old
+        // straight memcpy assumed 8-bit and sheared other depths horizontally.
+        for (int x = 0; x < width; x++) {
+          grayLine[x] = pngUnpackGraySample(pPixels, x, bpp);
+        }
+      }
       break;
 
     case PNG_PIXEL_TRUECOLOR:
@@ -185,7 +200,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
   // Convert entire source line to grayscale (improves cache locality)
   convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette,
-                    pDraw->iHasAlpha);
+                    pDraw->iHasAlpha, pDraw->iBpp);
 
   // Render scaled row using Bresenham-style integer stepping (no floating-point division)
   int dstWidth = ctx->dstWidth;
