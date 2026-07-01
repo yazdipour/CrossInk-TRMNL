@@ -18,7 +18,12 @@ struct JsonCallbacks {
 
 class StreamingJsonParser {
  public:
-  static constexpr size_t TOKEN_BUF_SIZE = 512;
+  // \uXXXX escapes are decoded to real UTF-8 bytes (see handleStringChar()'s
+  // unicodeDigitsRemaining handling), so most escaped characters cost 1-4 bytes here,
+  // not the 6 raw source bytes of "&" etc. TRMNL's /api/display responses measured
+  // ~486-521 bytes for image_url alone depending on how the server chose to escape it;
+  // sized with real headroom for that plus future longer URLs, not tuned to one case.
+  static constexpr size_t TOKEN_BUF_SIZE = 1024;
   static constexpr size_t MAX_NESTING = 32;
 
   explicit StreamingJsonParser(const JsonCallbacks& callbacks);
@@ -53,6 +58,13 @@ class StreamingJsonParser {
   void appendToken(char c);
   void emitToken();
 
+  // \uXXXX decoding. A code unit spans up to 4 characters and can arrive split across
+  // separate feed() calls, so the in-progress digits/value must be member state, not
+  // locals -- mirrors how literalPos/literalExpected track a split true/false/null.
+  void finishUnicodeEscape();
+  void appendUtf8CodePoint(uint32_t codepoint);
+  static int hexDigitValue(char c);
+
   bool inArray() const { return nestingDepth > 0 && nestingStack[nestingDepth - 1] == Container::ARRAY; }
 
   JsonCallbacks cb;
@@ -63,6 +75,10 @@ class StreamingJsonParser {
   bool escaped;
   bool tokenOverflow;
   bool error;
+
+  uint8_t unicodeDigitsRemaining;  // 0 = not mid-\uXXXX; else counts down 4..1
+  uint16_t unicodeValue;           // hex digits accumulated so far for the current \uXXXX
+  uint16_t pendingHighSurrogate;   // 0 = none; else a UTF-16 high surrogate awaiting its low pair
 
   Container nestingStack[MAX_NESTING];
   uint8_t nestingDepth;

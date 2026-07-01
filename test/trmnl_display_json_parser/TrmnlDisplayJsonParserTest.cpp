@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "lib/JsonParser/TrmnlDisplayJsonParser.h"
 #include "src/trmnl/TrmnlDisplayConfig.h"
@@ -126,6 +127,51 @@ void testMissingImageUrl() {
   PASS();
 }
 
+// Regression test for a real TRMNL /api/display response: a presigned S3 URL with
+// several ampersands that TRMNL's server was observed escaping as \uXXXX in some
+// responses and leaving as a literal '&' in others (both are valid JSON). Builds the
+// escaped wire-format JSON from the correctly-decoded URL below, then asserts that
+// parsing recovers the original -- proving both that \u0026 decodes to a real '&'
+// (not passed through as 6 literal bytes) and that the result still fits the token
+// buffer end to end through the full TrmnlDisplayJsonParser wrapper.
+void testHandlesLongEscapedImageUrl() {
+  printf("testHandlesLongEscapedImageUrl...\n");
+
+  const std::string expectedUrl =
+      "https://trmnl.s3.us-east-2.amazonaws.com/m8b1cjzs3zidyc0lexm460vy3t5j?"
+      "response-content-disposition=inline%3B%20filename%3D%22plugin-10a5b0%22%3B%20"
+      "filename%2A%3DUTF-8%27%27plugin-10a5b0&"
+      "response-content-type=image%2Fpng&"
+      "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
+      "X-Amz-Credential=AKIA47CRUQUU4VKBBMOF%2F20260701%2Fus-east-2%2Fs3%2Faws4_request&"
+      "X-Amz-Date=20260701T154633Z&"
+      "X-Amz-Expires=300&"
+      "X-Amz-SignedHeaders=host&"
+      "X-Amz-Signature=8e8f45ef38cbc565dc18b46574cafb1f8d117b513200d8c795729ef629a41545";
+
+  // Rebuild the same escaping TRMNL's server used for this response: every '&' as
+  // the 6-character source sequence \u0026, exactly as it arrives over the wire.
+  const std::string unicodeAmp = std::string(1, '\\') + "u0026";
+  std::string rawJsonUrl = expectedUrl;
+  for (size_t pos = 0; (pos = rawJsonUrl.find('&', pos)) != std::string::npos;) {
+    rawJsonUrl.replace(pos, 1, unicodeAmp);
+    pos += unicodeAmp.size();
+  }
+
+  const std::string json = R"({"status":0,"image_url":")" + rawJsonUrl +
+                           R"(","filename":"plugin-10a5b0-1782914788","refresh_rate":907})";
+
+  TrmnlDisplayJsonParser parser;
+  parser.feed(json.c_str(), json.length());
+
+  ASSERT_FALSE(parser.hasError());
+  ASSERT_TRUE(parser.foundImageUrl());
+  ASSERT_STREQ(parser.getImageUrl(), expectedUrl.c_str());
+
+  printf("  passed\n");
+  PASS();
+}
+
 void testDisplaySizeForOrientation() {
   printf("testDisplaySizeForOrientation...\n");
 
@@ -147,6 +193,7 @@ int main() {
   testParsesChunkedMinifiedResponse();
   testIgnoresNestedImageUrl();
   testMissingImageUrl();
+  testHandlesLongEscapedImageUrl();
   testDisplaySizeForOrientation();
 
   printf("\n%d passed, %d failed\n", testsPassed, testsFailed);

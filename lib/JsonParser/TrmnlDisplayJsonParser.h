@@ -33,7 +33,9 @@ class TrmnlDisplayJsonParser {
   StreamingJsonParser parser;
   LastKey lastKey = LastKey::NONE;
   uint16_t depth = 0;
-  char imageUrl[512] = "";
+  // Matches StreamingJsonParser::TOKEN_BUF_SIZE -- see its comment for why this needs
+  // real headroom beyond a "typical" image_url length.
+  char imageUrl[1024] = "";
   char filename[128] = "";
   uint32_t refreshRateSeconds = 0;
   bool imageUrlFound = false;

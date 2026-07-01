@@ -14,6 +14,9 @@ void StreamingJsonParser::reset() {
   nestingDepth = 0;
   literalLen = 0;
   literalPos = 0;
+  unicodeDigitsRemaining = 0;
+  unicodeValue = 0;
+  pendingHighSurrogate = 0;
 }
 
 void StreamingJsonParser::feed(const char* data, size_t len) {
@@ -45,6 +48,8 @@ void StreamingJsonParser::handleScanning(char c) {
     case '"':
       tokenLen = 0;
       tokenOverflow = false;
+      unicodeDigitsRemaining = 0;
+      pendingHighSurrogate = 0;
       if (expectingValue || inArray()) {
         state = State::IN_STRING_VALUE;
       } else {
@@ -123,6 +128,25 @@ void StreamingJsonParser::handleScanning(char c) {
 }
 
 void StreamingJsonParser::handleStringChar(char c) {
+  if (unicodeDigitsRemaining > 0) {
+    const int digit = hexDigitValue(c);
+    if (digit < 0) {
+      // error is terminal in normal use (feed()'s loop stops on it), but reset the
+      // in-progress escape state too so the parser stays internally consistent for
+      // any caller that inspects/reuses it after an error rather than discarding it.
+      error = true;
+      unicodeDigitsRemaining = 0;
+      unicodeValue = 0;
+      return;
+    }
+    unicodeValue = static_cast<uint16_t>((unicodeValue << 4) | static_cast<uint16_t>(digit));
+    --unicodeDigitsRemaining;
+    if (unicodeDigitsRemaining == 0) {
+      finishUnicodeEscape();
+    }
+    return;
+  }
+
   if (escaped) {
     escaped = false;
     switch (c) {
@@ -147,10 +171,8 @@ void StreamingJsonParser::handleStringChar(char c) {
         appendToken('\t');
         break;
       case 'u':
-        // Pass \uXXXX through as literal characters -- we don't decode
-        // Unicode escapes since our use case only needs ASCII field matching.
-        appendToken('\\');
-        appendToken('u');
+        unicodeDigitsRemaining = 4;
+        unicodeValue = 0;
         break;
       default:
         appendToken('\\');
@@ -166,11 +188,71 @@ void StreamingJsonParser::handleStringChar(char c) {
   }
 
   if (c == '"') {
+    if (pendingHighSurrogate != 0) {
+      // String closed with an unpaired UTF-16 high surrogate -- malformed input.
+      error = true;
+      return;
+    }
     emitToken();
     return;
   }
 
   appendToken(c);
+}
+
+void StreamingJsonParser::finishUnicodeEscape() {
+  if (pendingHighSurrogate != 0) {
+    if (unicodeValue >= 0xDC00 && unicodeValue <= 0xDFFF) {
+      // Valid low surrogate: combine per the UTF-16 surrogate pair formula.
+      const uint32_t codepoint = 0x10000 + ((static_cast<uint32_t>(pendingHighSurrogate) - 0xD800) << 10) +
+                                 (static_cast<uint32_t>(unicodeValue) - 0xDC00);
+      pendingHighSurrogate = 0;
+      appendUtf8CodePoint(codepoint);
+    } else {
+      // High surrogate not followed by a valid low surrogate -- malformed input.
+      error = true;
+    }
+    return;
+  }
+
+  if (unicodeValue >= 0xD800 && unicodeValue <= 0xDBFF) {
+    // High surrogate: hold it and wait for the low surrogate that must follow.
+    pendingHighSurrogate = unicodeValue;
+    return;
+  }
+
+  if (unicodeValue >= 0xDC00 && unicodeValue <= 0xDFFF) {
+    // Low surrogate with no preceding high surrogate -- malformed input.
+    error = true;
+    return;
+  }
+
+  appendUtf8CodePoint(unicodeValue);
+}
+
+void StreamingJsonParser::appendUtf8CodePoint(const uint32_t codepoint) {
+  if (codepoint <= 0x7F) {
+    appendToken(static_cast<char>(codepoint));
+  } else if (codepoint <= 0x7FF) {
+    appendToken(static_cast<char>(0xC0 | (codepoint >> 6)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else if (codepoint <= 0xFFFF) {
+    appendToken(static_cast<char>(0xE0 | (codepoint >> 12)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else {
+    appendToken(static_cast<char>(0xF0 | (codepoint >> 18)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  }
+}
+
+int StreamingJsonParser::hexDigitValue(const char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
 }
 
 void StreamingJsonParser::handleNumber(char c) {

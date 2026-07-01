@@ -150,13 +150,122 @@ TEST(StreamingJsonParser, StringEscapes) {
   EXPECT_EQ(events[2].value, std::string("a\"b\\c/d\ne\tf"));
 }
 
-TEST(StreamingJsonParser, UnicodeEscapePassthrough) {
+TEST(StreamingJsonParser, UnicodeEscapeBasicAscii) {
+  // AB -- two BMP code points in the 1-byte-UTF-8 range -- decode to "AB".
   auto events = parse(R"({"u": "\u0041\u0042"})");
 
   ASSERT_EQ(events.size(), 4u);
   EXPECT_EQ(events[2].type, EventType::STRING);
-  // \uXXXX passed through as literal \u followed by the hex digits
-  EXPECT_EQ(events[2].value, "\\u0041\\u0042");
+  EXPECT_EQ(events[2].value, "AB");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeAmpersand) {
+  // The real-world case that motivated this: TRMNL's /api/display sometimes escapes
+  // '&' as & within image_url. This must decode back to a literal '&', not the
+  // 6-byte source text, or the resulting URL is unusable for the actual image request.
+  auto events = parse(R"({"u": "a\u0026b\u0026c"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "a&b&c");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeTwoByteUtf8) {
+  // e-acute -- first code point requiring 2-byte UTF-8 (0xC3 0xA9).
+  auto events = parse(R"({"u": "caf\u00E9"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "caf\xc3\xa9");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeThreeByteUtf8) {
+  // SNOWMAN (U+2603) -- requires 3-byte UTF-8 (0xE2 0x98 0x83).
+  auto events = parse(R"({"u": "\u2603"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "\xe2\x98\x83");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeSurrogatePairFourByteUtf8) {
+  // U+1F600 GRINNING FACE, beyond the BMP -- JSON encodes it as a UTF-16 surrogate
+  // pair (😀) that must combine into a single 4-byte UTF-8 sequence
+  // (0xF0 0x9F 0x98 0x80), not two separate (invalid) 3-byte sequences.
+  auto events = parse(R"({"u": "\uD83D\uDE00"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "\xf0\x9f\x98\x80");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeSurrogatePairSplitAcrossFeed) {
+  // Same surrogate pair as UnicodeEscapeSurrogatePairFourByteUtf8, but split so
+  // the high surrogate arrives in one feed() call and the low surrogate in the
+  // next -- pendingHighSurrogate has to survive as member state across the call
+  // boundary, not just across single characters within one call.
+  const char* highSurrogate = R"(\uD83D)";
+  const char* lowSurrogateAndClose = R"JSON(\uDE00"})JSON";
+  const char* prefix = R"({"u": ")";
+
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  parser.feed(prefix, strlen(prefix));
+  parser.feed(highSurrogate, strlen(highSurrogate));
+  parser.feed(lowSurrogateAndClose, strlen(lowSurrogateAndClose));
+
+  EXPECT_FALSE(parser.hasError());
+  ASSERT_EQ(ctx.events.size(), 4u);
+  EXPECT_EQ(ctx.events[2].type, EventType::STRING);
+  EXPECT_EQ(ctx.events[2].value, "\xf0\x9f\x98\x80");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeLoneHighSurrogateIsError) {
+  // A high surrogate with no low surrogate pair is malformed JSON.
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  const char* json = R"({"u": "\ud83d"})";
+  parser.feed(json, strlen(json));
+  EXPECT_TRUE(parser.hasError());
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeLoneLowSurrogateIsError) {
+  // A low surrogate with no preceding high surrogate is malformed JSON.
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  const char* json = R"({"u": "\ude00"})";
+  parser.feed(json, strlen(json));
+  EXPECT_TRUE(parser.hasError());
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeInvalidHexDigitIsError) {
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  const char* json = R"({"u": "\u00zz"})";
+  parser.feed(json, strlen(json));
+  EXPECT_TRUE(parser.hasError());
+}
+
+TEST(StreamingJsonParser, ChunkedSplitInsideUnicodeEscape) {
+  // & split mid-hex-digits across two feed() calls must still decode correctly --
+  // the digit accumulator has to be member state, not a local, to survive the split.
+  const char* json = R"({"k": "a\u0026b"})";
+  auto reference = parse(json);
+
+  const char* u = strchr(json, 'u');
+  ASSERT_NE(u, nullptr);
+  size_t splitAt = static_cast<size_t>(u - json) + 2;  // land inside the 4 hex digits
+
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  parser.feed(json, splitAt);
+  parser.feed(json + splitAt, strlen(json) - splitAt);
+
+  ASSERT_EQ(ctx.events.size(), reference.size());
+  for (size_t i = 0; i < reference.size(); ++i) {
+    EXPECT_EQ(ctx.events[i].type, reference[i].type);
+    EXPECT_EQ(ctx.events[i].value, reference[i].value);
+  }
 }
 
 TEST(StreamingJsonParser, Numbers) {
