@@ -244,15 +244,24 @@ void HalGPIO::startDeepSleep() {
 
 void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
   if (shortPressAllowed) {
-    // Fast path - no duration check needed
+    // Fast path: the caller has already decided any press length should continue
+    // booting (e.g. shortPwrBtn==SLEEP, or the TRMNL-refresh path in main.cpp, which
+    // does its OWN separate measurePowerButtonPressWasShort() call afterward to
+    // classify short vs. long -- this early return is exactly what lets that call
+    // happen instead of being preempted by startDeepSleep() below).
     return;
   }
   // TODO: Intermittent edge case remains: a single tap followed by another single tap
   // can still power on the device. Tighten wake debounce/state handling here.
+  if (measurePowerButtonPressWasShort(requiredDurationMs)) {
+    startDeepSleep();
+  }
+}
 
+bool HalGPIO::measurePowerButtonPressWasShort(uint16_t durationMs) {
   // Calibrate: subtract boot time already elapsed, assuming button held since boot
   const uint16_t calibration = millis();
-  const uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
+  const uint16_t calibratedDuration = (calibration < durationMs) ? (durationMs - calibration) : 1;
 
   const auto start = millis();
   inputMgr.update();
@@ -261,17 +270,15 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
     delay(10);
     inputMgr.update();
   }
-  if (inputMgr.isPressed(BTN_POWER)) {
-    do {
-      delay(10);
-      inputMgr.update();
-    } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getPowerButtonHeldTime() < calibratedDuration);
-    if (inputMgr.getPowerButtonHeldTime() < calibratedDuration) {
-      startDeepSleep();
-    }
-  } else {
-    startDeepSleep();
+  if (!inputMgr.isPressed(BTN_POWER)) {
+    // Never registered as pressed (already released) -- treat as short.
+    return true;
   }
+  do {
+    delay(10);
+    inputMgr.update();
+  } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getPowerButtonHeldTime() < calibratedDuration);
+  return inputMgr.getPowerButtonHeldTime() < calibratedDuration;
 }
 
 bool HalGPIO::isUsbConnected() const {

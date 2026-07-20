@@ -75,10 +75,25 @@ class HalGPIO {
   // Setup wake up GPIO and enter deep sleep
   void startDeepSleep();
 
-  // Verify power button was held long enough after wakeup.
-  // If verification fails, enters deep sleep and does not return.
+  // Verify power button was held long enough after wakeup. If shortPressAllowed is
+  // true, returns immediately without measuring anything -- the caller is asserting
+  // that ANY press length should continue booting, so no gate is needed. Otherwise
+  // measures the press (see measurePowerButtonPressWasShort below) and, if it comes
+  // back short, rejects the wakeup: enters deep sleep and does not return.
   // Should only be called when wakeup reason is PowerButton.
   void verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+
+  // Generic primitive: polls the power button and reports whether it was released
+  // before durationMs elapsed (calibrated for boot time already spent), or is still
+  // held past it. Never rejects the wakeup itself -- the caller decides what to do
+  // with the short/long verdict. Two call sites use this with deliberately different
+  // thresholds and meanings, so match the threshold to the question being asked:
+  //   - verifyPowerButtonWakeup (above) passes the WAKE duration (10-200ms) purely as
+  //     a noise filter: "was this even a deliberate press, or a bounce?"
+  //   - main.cpp's TRMNL-refresh routing passes the LONG-PRESS duration (400ms) to
+  //     classify intent: "should this be treated as a short action or a long press?"
+  // Should only be called when wakeup reason is PowerButton.
+  bool measurePowerButtonPressWasShort(uint16_t durationMs);
 
   // Check if USB is connected
   bool isUsbConnected() const;

@@ -31,6 +31,7 @@ class CrossPointSettings {
     QUICK_RESUME = 9,
     MINIMAL_STATS_SLEEP = 10,
     DASHBOARD_SLEEP = 11,
+    TRMNL = 12,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -40,6 +41,7 @@ class CrossPointSettings {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum TRMNL_ORIENTATION { TRMNL_LANDSCAPE = 0, TRMNL_PORTRAIT = 1, TRMNL_ORIENTATION_COUNT };
 
   // Status bar enum - legacy
   enum STATUS_BAR_MODE {
@@ -387,6 +389,14 @@ class CrossPointSettings {
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
   char opdsPassword[64] = "";
+  char trmnlServerUrl[160] = "";
+  char trmnlApiKey[128] = "";
+  char trmnlDeviceId[32] = "";
+  uint8_t trmnlOrientation = TRMNL_LANDSCAPE;
+  // Short-pressing the power button while asleep with the TRMNL sleep screen
+  // active refreshes it in place instead of the default wake behavior. Off by
+  // default -- opt in per-device.
+  uint8_t trmnlRefreshOnPowerButton = 0;
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior

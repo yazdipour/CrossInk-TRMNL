@@ -39,6 +39,7 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   ClockSync,
+  TrmnlSettings,
 };
 
 struct SettingInfo {

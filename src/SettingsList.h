@@ -240,7 +240,7 @@ inline SettingInfo buildSleepScreenSetting() {
       StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
       {StrId::STR_NONE_OPT, StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER,
        StrId::STR_COVER_CUSTOM, StrId::STR_PAGE_OVERLAY, StrId::STR_READING_STATS, StrId::STR_THEME_MINIMAL,
-       StrId::STR_THEME_MINIMAL_STATS, StrId::STR_THEME_DASHBOARD, StrId::STR_QUICK_RESUME},
+       StrId::STR_THEME_MINIMAL_STATS, StrId::STR_THEME_DASHBOARD, StrId::STR_TRMNL, StrId::STR_QUICK_RESUME},
       "sleepScreen", StrId::STR_CAT_DISPLAY);
   s.withEnumRawValues({
       static_cast<uint8_t>(CrossPointSettings::BLANK),
@@ -254,7 +254,9 @@ inline SettingInfo buildSleepScreenSetting() {
       static_cast<uint8_t>(CrossPointSettings::MINIMAL_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::DASHBOARD_SLEEP),
+      static_cast<uint8_t>(CrossPointSettings::TRMNL),
       static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
+      static_cast<uint8_t>(CrossPointSettings::TRMNL),
   });
   return s;
 }
@@ -587,6 +589,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::trackReadingStats, "trackReadingStats",
                             StrId::STR_CAT_SYSTEM));
 #endif
+    add(SettingInfo::String(StrId::STR_TRMNL_SERVER_URL, SETTINGS.trmnlServerUrl, sizeof(SETTINGS.trmnlServerUrl),
+                            "trmnlServerUrl", StrId::STR_TRMNL_SETTINGS));
+    add(SettingInfo::String(StrId::STR_TRMNL_API_KEY, SETTINGS.trmnlApiKey, sizeof(SETTINGS.trmnlApiKey),
+                            "trmnlApiKey", StrId::STR_TRMNL_SETTINGS)
+            .withObfuscated());
+    add(SettingInfo::String(StrId::STR_TRMNL_DEVICE_ID, SETTINGS.trmnlDeviceId, sizeof(SETTINGS.trmnlDeviceId),
+                            "trmnlDeviceId", StrId::STR_TRMNL_SETTINGS));
+    add(SettingInfo::Enum(StrId::STR_TRMNL_ORIENTATION, &CrossPointSettings::trmnlOrientation,
+                          {StrId::STR_TRMNL_HORIZONTAL, StrId::STR_TRMNL_VERTICAL}, "trmnlOrientation",
+                          StrId::STR_TRMNL_SETTINGS));
+    add(SettingInfo::Toggle(StrId::STR_TRMNL_REFRESH_ON_POWER_BUTTON, &CrossPointSettings::trmnlRefreshOnPowerButton,
+                            "trmnlRefreshOnPowerButton", StrId::STR_TRMNL_SETTINGS));
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     add(SettingInfo::DynamicString(
@@ -914,11 +928,12 @@ inline std::vector<SettingInfo> buildDisplaySleepSettingsList(const std::vector<
 
 inline std::vector<SettingInfo> buildSystemSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> systemSettings;
-  systemSettings.reserve(8);
+  systemSettings.reserve(9);
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_DEVICE, SettingAction::SystemDevice));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_SYSTEM_FILES_CACHE, SettingAction::SystemFilesCache));
   systemSettings.push_back(SettingInfo::Submenu(StrId::STR_READING_STATS, SettingAction::SystemReadingStats));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_TRMNL_SETTINGS, SettingAction::TrmnlSettings));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
