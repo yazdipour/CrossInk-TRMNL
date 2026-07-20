@@ -93,6 +93,7 @@
 - File Browser long-press folder action for choosing a custom sleep-image folder instead of only `/.sleep` or `/sleep`.
 - Expanded X3 Reading Stats, including streaks, time charts, editable dates, all-time backups, reset controls, an idle-time threshold, and the `Minimal Stats` sleep screen.
 - `Reset Reading Pace` in the EPUB reader menu when Time Left is enabled, for clearing only the time-left pace estimate while keeping book reading stats.
+- Added TRMNL as a sleep-screen wallpaper source with configurable server, API key, device ID, and orientation.
 
 ### Changed
 - Display, Reader, and Controls settings now open list menus instead of cycling through options one by one.
