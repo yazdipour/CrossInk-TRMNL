@@ -111,6 +111,10 @@ class CrossPointWebServer {
   void handleGetSettings() const;
   void handlePostSettings();
 
+  // Karakeep connection settings. The API token is write-only over HTTP.
+  void handleGetKarakeepConfig() const;
+  void handlePostKarakeepConfig();
+
   // Font management handlers
   void handleFontsPage() const;
   void handleFontList() const;

@@ -101,6 +101,13 @@ bool sameOrigin(const ParsedUrl& a, const ParsedUrl& b) {
   return a.https == b.https && a.port == b.port && strcasecmp(a.host.c_str(), b.host.c_str()) == 0;
 }
 
+bool hasAuthorizationHeader(const HttpDownloader::Header* headers, const size_t headerCount) {
+  for (size_t i = 0; i < headerCount; ++i) {
+    if (headers[i].name && strcasecmp(headers[i].name, "Authorization") == 0) return true;
+  }
+  return false;
+}
+
 const char* schemeName(const ParsedUrl& url) { return url.https ? "https" : "http"; }
 
 std::string buildRedirectUrl(const std::string& baseUrl, const std::string& location) {
@@ -213,6 +220,9 @@ HttpDownloader::DownloadError runGetWolfSsl(const std::string& url, const std::s
 
   ParsedUrl credentialOrigin;
   const bool hasCredentials = !username.empty() && !password.empty() && parseUrl(url, credentialOrigin);
+  ParsedUrl headerOrigin;
+  const bool hasCustomAuthorization =
+      hasAuthorizationHeader(sink.headers, sink.headerCount) && parseUrl(url, headerOrigin);
   ProgressNotifier progressNotifier(sink.progress);
 
   for (uint8_t hop = 0; hop < MAX_REDIRECTS; ++hop) {
@@ -306,6 +316,11 @@ HttpDownloader::DownloadError runGetWolfSsl(const std::string& url, const std::s
                 redirect.host.c_str(), redirect.port);
         return HttpDownloader::HTTP_ERROR;
       }
+      if (hasCustomAuthorization && !sameOrigin(redirect, headerOrigin)) {
+        LOG_ERR("HTTP", "Rejected authorized redirect to different origin: %s://%s:%u", schemeName(redirect),
+                redirect.host.c_str(), redirect.port);
+        return HttpDownloader::HTTP_ERROR;
+      }
       currentUrl = redirectUrl;
       LOG_DBG("HTTP", "Redirecting to: %s", redirect.host.c_str());
       continue;
@@ -344,6 +359,9 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
 
   ParsedUrl credentialOrigin;
   const bool hasCredentials = !username.empty() && !password.empty() && parseUrl(url, credentialOrigin);
+  ParsedUrl headerOrigin;
+  const bool hasCustomAuthorization =
+      hasAuthorizationHeader(sink.headers, sink.headerCount) && parseUrl(url, headerOrigin);
 
   for (uint8_t hop = 0; hop < MAX_REDIRECTS; ++hop) {
     ParsedUrl currentOrigin;
@@ -410,6 +428,12 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
       }
       if (hasCredentials && !sameOrigin(redirect, credentialOrigin)) {
         LOG_ERR("HTTP", "Rejected credentialed redirect to different origin: %s://%s:%u", schemeName(redirect),
+                redirect.host.c_str(), redirect.port);
+        esp_http_client_cleanup(client);
+        return HttpDownloader::HTTP_ERROR;
+      }
+      if (hasCustomAuthorization && !sameOrigin(redirect, headerOrigin)) {
+        LOG_ERR("HTTP", "Rejected authorized redirect to different origin: %s://%s:%u", schemeName(redirect),
                 redirect.host.c_str(), redirect.port);
         esp_http_client_cleanup(client);
         return HttpDownloader::HTTP_ERROR;

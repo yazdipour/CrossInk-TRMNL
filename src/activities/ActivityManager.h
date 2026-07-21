@@ -25,7 +25,7 @@ class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
 enum class RequestUpdateResult { Rendered, Rejected };
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, KARAKEEP, FILE_TRANSFER, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -106,6 +106,7 @@ class ActivityManager {
   void goToRecentBooks();
   void goToBrowser();
   bool goToOpdsServer(uint32_t serverIndex, bool networkBootReady = false);
+  bool goToKarakeep(bool networkBootReady = false);
   void goToReader(std::string path, bool suppressBackRelease = false, bool allowFastInitialRefresh = false,
                   bool cleanImageBaseOnEntry = false);
   void goToSleep(bool fromTimeout = false);

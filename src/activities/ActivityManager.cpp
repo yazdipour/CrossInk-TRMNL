@@ -11,12 +11,14 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "KarakeepConfigStore.h"
 #include "OpdsServerStore.h"
 #include "SilentRestart.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/TouchRegistry.h"
+#include "browser/KarakeepBrowserActivity.h"
 #include "home/AlertActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -390,6 +392,30 @@ bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool netw
   return true;
 }
 
+bool ActivityManager::goToKarakeep(const bool networkBootReady) {
+  if (!networkBootReady) {
+    silentRestartToNetwork(NetworkBootTarget::KARAKEEP);
+    return true;
+  }
+  if (!KARAKEEP_STORE.loadFromFile() || !KARAKEEP_STORE.isConfigured()) {
+    LOG_ERR("ACT", "Karakeep configuration missing");
+    KARAKEEP_STORE.release();
+    return false;
+  }
+  std::string serverUrl = KARAKEEP_STORE.getServerUrl();
+  std::string apiToken = KARAKEEP_STORE.getApiToken();
+  KARAKEEP_STORE.release();
+  auto browser = makeUniqueNoThrow<KarakeepBrowserActivity>(renderer, mappedInput, std::move(serverUrl),
+                                                            std::move(apiToken));
+  if (!browser) {
+    LOG_ERR("ACT", "OOM: Karakeep browser after minimal boot (free=%u maxAlloc=%u)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
+  replaceActivity(std::move(browser));
+  return true;
+}
+
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease, const bool allowFastInitialRefresh,
                                  const bool cleanImageBaseOnEntry) {
   // OPDS credentials are unrelated to local reading and may contain several
@@ -422,6 +448,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, const bool initialFul
       initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    } else if (activityName == "KarakeepBrowser") {
+      initialMenuItem = HomeMenuItem::KARAKEEP;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "NearbyStatsSync") {

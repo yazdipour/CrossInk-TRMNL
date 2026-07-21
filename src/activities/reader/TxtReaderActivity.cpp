@@ -18,6 +18,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
 #include "activities/home/FileBrowserActionActivity.h"
 #include "components/UITheme.h"
@@ -29,6 +30,12 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 constexpr uint32_t MAX_CACHE_PAGES = 65535;   // Sanity cap to prevent unbounded reserve()
+constexpr char KARAKEEP_ARTICLE_PREFIX[] = "/karakeep/";
+constexpr char LEGACY_KARAKEEP_ARTICLE_PREFIX[] = "/.crosspoint/karakeep/";
+
+bool isKarakeepArticle(const std::string& path) {
+  return path.starts_with(KARAKEEP_ARTICLE_PREFIX) || path.starts_with(LEGACY_KARAKEEP_ARTICLE_PREFIX);
+}
 
 // Parses and word-wraps lines from a file chunk into outLines.
 // Returns the number of bytes consumed from the start of buffer.
@@ -196,9 +203,13 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  // Short press BACK goes directly to home
+  // Karakeep articles return to their source list; regular text files return Home.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    if (txt && isKarakeepArticle(txt->getPath())) {
+      silentRestartToNetwork(NetworkBootTarget::KARAKEEP);
+      return;
+    }
     onGoHome();
     return;
   }

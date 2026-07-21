@@ -525,11 +525,51 @@ let allSettings = [];
     }
   }
 
-  // Sequential, not concurrent: the device's web server handles one client
-  // connection at a time, and three simultaneous fetches on page load can
-  // stall long enough to delay or interrupt a response.
-  (async () => {
+  // --- Karakeep ---
+  // The token is write-only: blank means keep the saved token.
+  async function loadKarakeepConfig() {
+    try {
+      const resp = await fetch('/api/karakeep');
+      if (!resp.ok) throw new Error('Failed to load');
+      const config = await resp.json();
+      document.getElementById('karakeep-container').innerHTML =
+        '<div class="card"><h2>Karakeep</h2><div class="opds-server">' +
+          '<div class="setting-row"><span class="setting-name">Server URL</span>' +
+            '<span class="setting-control"><input type="text" id="karakeep-url" value="' + escapeHtml(config.serverUrl || '') + '" placeholder="http://192.168.1.10:3000"></span></div>' +
+          '<div class="setting-row"><span class="setting-name">API Token</span>' +
+            '<span class="setting-control"><input type="password" id="karakeep-token" placeholder="' + (config.hasToken ? '(unchanged)' : '') + '"></span></div>' +
+          '<div class="opds-actions"><button class="btn-small btn-save-server" onclick="saveKarakeepConfig()">Save</button></div>' +
+        '</div></div>';
+    } catch (e) {
+      console.error('Karakeep load error:', e);
+    }
+  }
+
+  async function saveKarakeepConfig() {
+    const data = {serverUrl: document.getElementById('karakeep-url').value.trim()};
+    const token = document.getElementById('karakeep-token').value.trim();
+    if (token) data.token = token;
+    try {
+      const resp = await fetch('/api/karakeep', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('Karakeep settings saved!', false);
+      await loadKarakeepConfig();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  async function initializeSettingsPage() {
+    // The ESP32 web server handles one request at a time. Keep startup
+    // sequential so phone browsers do not open four competing connections.
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
-  })();
+    await loadKarakeepConfig();
+  }
+
+  initializeSettingsPage();

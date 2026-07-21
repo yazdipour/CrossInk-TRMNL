@@ -66,7 +66,10 @@ int barsForRssi(int rssi, int currentBars) {
 
 void CrossPointWebServerActivity::onEnter() {
   Activity::onEnter();
+  // Wi-Fi and the HTTP stack need the largest contiguous heap block available.
+  // Rebuild the font catalog lazily only if Settings or Fonts requests it.
   sdFontSystem.releaseForNetwork(renderer);
+  LOG_INF("WEBACT", "Network memory prepared: free=%u maxAlloc=%u", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
 
@@ -314,6 +317,7 @@ void CrossPointWebServerActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
+    LOG_INF("WEBACT", "Web server ready: free=%u maxAlloc=%u", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
 
     // Force an immediate render since we're transitioning from a subactivity

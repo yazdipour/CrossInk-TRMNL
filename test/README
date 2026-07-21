@@ -31,6 +31,12 @@ This validates the tiny TRMNL `/api/display` response parser and the portable
 TRMNL display orientation sizing used by the sleep screen fetch path. It runs
 on the host with `c++` and does not require PlatformIO or device hardware.
 
+Karakeep bookmark parsing and streamed HTML-to-text conversion:
+
+```sh
+test/run_karakeep_test.sh
+```
+
 Simulator smoke test:
 - Run `./scripts/run_simulator_smoke_test.py` from the repo root.
 - The script builds `env:simulator`, creates a temporary `fs_`, copies a test EPUB into it, opens common screens, renders them, drives reader page/menu input, and fails on crashes or missing success output.

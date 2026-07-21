@@ -23,6 +23,7 @@
 #include "AppCapabilities.h"
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
+#include "KarakeepConfigStore.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
@@ -326,6 +327,8 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/karakeep", HTTP_GET, [this] { handleGetKarakeepConfig(); });
+  server->on("/api/karakeep", HTTP_POST, [this] { handlePostKarakeepConfig(); });
 
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
@@ -1461,6 +1464,60 @@ void CrossPointWebServer::handlePostSettings() {
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
   sdFontSystem.releaseRegistry();
+}
+
+void CrossPointWebServer::handleGetKarakeepConfig() const {
+  KARAKEEP_STORE.loadFromFile();
+  JsonDocument doc;
+  doc["serverUrl"] = KARAKEEP_STORE.getServerUrl();
+  doc["hasToken"] = !KARAKEEP_STORE.getApiToken().empty();
+  String response;
+  serializeJson(doc, response);
+  KARAKEEP_STORE.release();
+  server->send(200, "application/json", response);
+}
+
+void CrossPointWebServer::handlePostKarakeepConfig() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, server->arg("plain"));
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  std::string serverUrl = doc["serverUrl"] | "";
+  std::string token = doc["token"] | "";
+  if (serverUrl.length() > KarakeepConfigStore::MAX_SERVER_URL_LENGTH ||
+      (serverUrl.rfind("http://", 0) != 0 && serverUrl.rfind("https://", 0) != 0)) {
+    server->send(400, "text/plain", "Server URL must start with http:// or https://");
+    return;
+  }
+  if (token.length() > KarakeepConfigStore::MAX_TOKEN_LENGTH) {
+    server->send(400, "text/plain", "API token is too long");
+    return;
+  }
+
+  KARAKEEP_STORE.loadFromFile();
+  if (token.empty()) token = KARAKEEP_STORE.getApiToken();
+  if (token.empty()) {
+    KARAKEEP_STORE.release();
+    server->send(400, "text/plain", "API token is required");
+    return;
+  }
+
+  KARAKEEP_STORE.set(std::move(serverUrl), std::move(token));
+  const bool saved = KARAKEEP_STORE.saveToFile();
+  KARAKEEP_STORE.release();
+  if (!saved) {
+    server->send(500, "text/plain", "Failed to save Karakeep settings");
+    return;
+  }
+  server->send(200, "text/plain", "Karakeep settings saved");
 }
 
 // ---- OPDS Server API ----

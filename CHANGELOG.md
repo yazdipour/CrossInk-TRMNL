@@ -13,6 +13,7 @@
 - Dictionary font and size defaults can be set globally from Settings > Reader > Font Options, with per-book choices still taking precedence.
 - Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
+- Karakeep integration can browse saved link and text bookmarks, download extracted article text, and cache it on the SD card for offline reading.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
 - Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
 - Look Up Word can now be assigned to short- and long-press Power button shortcuts.
@@ -39,6 +40,7 @@
 - SD-card fonts now reuse their page-sized glyph buffers, reducing heap fragmentation during long reading sessions.
 - Firmware builds now prioritize usable heap over oversized system timer stacks and maximum WiFi throughput, leaving more memory for reading and network operations.
 - Downloaded-font size range options now show their actual point-size ranges instead of firmware build names.
+- Karakeep articles are now cached in the visible `/karakeep/` folder, and pressing Back while reading one returns to the Karakeep list.
 - KOReader Sync and authentication, OTA updates, and OPDS browsing now restart into a lightweight network mode that leaves reader and Home data unloaded, providing more contiguous memory for WiFi and secure connections.
 - The web file manager can now delete non-empty folders recursively and, when hidden files are shown, remove hidden or system-managed SD card items after confirmation.
 - SD-font, OPDS catalogs, and other unneeded settings now stay out of memory while reading unless their settings are open.
@@ -50,6 +52,7 @@
 
 ### Fixed
 
+- File Transfer now releases the unused SD-font catalog before starting Wi-Fi, preventing the web dashboard and device controls from freezing under low memory.
 - TRMNL remains the selected lock screen when inactivity sleep triggers, even if Quick Resume after timeout is enabled.
 - Book menu tab navigation, popup scrolling, customized Reading Stats hints, and short button presses after low-power mode now work reliably.
 - Sleep screens now honor the current orientation, avoid X4 transition flashes, fall back to a valid wallpaper when needed, and handle low-memory image decoding without rebooting.
