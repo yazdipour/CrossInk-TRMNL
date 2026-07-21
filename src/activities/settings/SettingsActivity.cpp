@@ -27,6 +27,7 @@
 #include "SettingsList.h"
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
+#include "TrmnlSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -923,6 +924,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::TrmnlSettings:
+        startActivityForResult(std::make_unique<TrmnlSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -1088,6 +1092,9 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   }
   if (setting.type == SettingType::ACTION && setting.action == SettingAction::Language) {
     return I18N.getLanguageName(I18N.getLanguage());
+  }
+  if (setting.type == SettingType::ACTION && setting.action == SettingAction::TrmnlSettings) {
+    return SETTINGS.trmnlServerUrl[0] == '\0' ? tr(STR_NOT_SET) : SETTINGS.trmnlServerUrl;
   }
   if (setting.type == SettingType::STRING) {
     if (setting.nameId == StrId::STR_DEVICE_NAME) return SETTINGS.getEffectiveDeviceName();

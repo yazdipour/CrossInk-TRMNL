@@ -19,11 +19,17 @@ class HttpDownloader {
   // streaming parser consume the response without buffering the whole body.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
+  struct Header {
+    const char* name;
+    const char* value;
+  };
+
   enum DownloadError {
     OK = 0,
     HTTP_ERROR,
     FILE_ERROR,
     ABORTED,
+    SIZE_LIMIT_EXCEEDED,
   };
 
   enum class Transport {
@@ -34,17 +40,19 @@ class HttpDownloader {
   struct DownloadOptions {
     explicit DownloadOptions(bool preservePartial = false, bool resumePartial = false,
                              CancelCallback shouldCancel = nullptr, size_t bufferSize = 0,
-                             Transport transport = Transport::ESP_HTTP)
+                             size_t maxBytes = 0, Transport transport = Transport::ESP_HTTP)
         : preservePartial(preservePartial),
           resumePartial(resumePartial),
           shouldCancel(std::move(shouldCancel)),
           bufferSize(bufferSize),
+          maxBytes(maxBytes),
           transport(transport) {}
 
     bool preservePartial;
     bool resumePartial;
     CancelCallback shouldCancel;
     size_t bufferSize;
+    size_t maxBytes;
     Transport transport;
   };
 
@@ -52,10 +60,12 @@ class HttpDownloader {
    * Fetch text content from a URL with optional credentials.
    */
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const Header* headers = nullptr, size_t headerCount = 0,
+                       size_t maxBytes = 0);
 
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const Header* headers = nullptr, size_t headerCount = 0,
+                       size_t maxBytes = 0);
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
@@ -76,5 +86,6 @@ class HttpDownloader {
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      DownloadOptions options = DownloadOptions());
+                                      DownloadOptions options = DownloadOptions(), const Header* headers = nullptr,
+                                      size_t headerCount = 0);
 };

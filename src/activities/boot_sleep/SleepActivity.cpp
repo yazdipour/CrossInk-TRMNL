@@ -33,6 +33,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "trmnl/TrmnlSleepClient.h"
 
 namespace {
 
@@ -463,10 +464,7 @@ bool selectRandomSleepImage(SleepImageMode mode, SleepImageSelection& selection,
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  const bool renderQuickResume =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+  const bool renderQuickResume = SETTINGS.shouldUseQuickResumeSleepScreen(fromTimeout);
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();
@@ -504,6 +502,8 @@ void SleepActivity::onEnter() {
       return renderReadingStatsSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::MINIMAL_SLEEP):
       return renderMinimalSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TRMNL):
+      return renderTrmnlSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::MINIMAL_STATS_SLEEP):
       return renderMinimalStatsSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::DASHBOARD_SLEEP):
@@ -665,6 +665,82 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
     renderer.displayGrayBuffer(TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
     renderer.setRenderMode(GfxRenderer::BW);
+  }
+}
+
+bool SleepActivity::renderPngSleepScreen(const std::string& path) const {
+  if (!Storage.exists(path.c_str())) return false;
+  constexpr size_t MIN_FREE_HEAP = 60 * 1024;
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+    LOG_ERR("SLP", "Not enough heap for PNG sleep decoder: %u free", ESP.getFreeHeap());
+    return false;
+  }
+  PNG* png = new (std::nothrow) PNG();
+  if (!png) return false;
+  int rc = png->open(path.c_str(), pngSleepOpen, pngSleepClose, pngSleepRead, pngSleepSeek, pngOverlayDraw);
+  if (rc != PNG_SUCCESS) {
+    delete png;
+    LOG_ERR("SLP", "PNG sleep open failed for %s: %d", path.c_str(), rc);
+    return false;
+  }
+
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int srcW = png->getWidth();
+  const int srcH = png->getHeight();
+  float yScale = 1.0f;
+  int dstW = srcW;
+  int dstH = srcH;
+  if (srcW > pageWidth || srcH > pageHeight) {
+    const float scaleX = static_cast<float>(pageWidth) / srcW;
+    const float scaleY = static_cast<float>(pageHeight) / srcH;
+    const float scale = (scaleX < scaleY) ? scaleX : scaleY;
+    dstW = static_cast<int>(srcW * scale);
+    dstH = static_cast<int>(srcH * scale);
+    yScale = static_cast<float>(dstH) / srcH;
+  }
+
+  renderer.clearScreen();
+  PngOverlayCtx ctx{&renderer, pageWidth, pageHeight, srcW, dstW, (pageWidth - dstW) / 2, (pageHeight - dstH) / 2,
+                    yScale, -1, -2, png};
+  rc = png->decode(&ctx, 0);
+  png->close();
+  delete png;
+  if (rc != PNG_SUCCESS) {
+    LOG_ERR("SLP", "PNG sleep decode failed for %s: %d", path.c_str(), rc);
+    return false;
+  }
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  return true;
+}
+
+bool SleepActivity::renderTrmnlCachedImage() const {
+  if (renderPngSleepScreen(TrmnlSleepClient::CACHE_PNG)) return true;
+  FsFile file;
+  if (Storage.openFileForRead("TRM", TrmnlSleepClient::CACHE_BMP, file)) {
+    Bitmap bitmap(file, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      renderBitmapSleepScreen(bitmap);
+      file.close();
+      return true;
+    }
+    file.close();
+  }
+  return false;
+}
+
+void SleepActivity::renderTrmnlSleepScreen() const {
+  const auto trmnlOrientation = SETTINGS.trmnlOrientation == CrossPointSettings::TRMNL_PORTRAIT
+                                    ? trmnl::Orientation::Portrait
+                                    : trmnl::Orientation::Landscape;
+  renderer.setOrientation(trmnlOrientation == trmnl::Orientation::Portrait
+                              ? GfxRenderer::Orientation::Portrait
+                              : GfxRenderer::Orientation::LandscapeCounterClockwise);
+  const TrmnlSleepClient::Config config{SETTINGS.trmnlServerUrl, SETTINGS.trmnlApiKey, SETTINGS.trmnlDeviceId,
+                                        trmnl::displaySizeFor(trmnlOrientation), trmnl::modelFor(trmnlOrientation)};
+  TrmnlSleepClient::fetchLatest(config);
+  if (!renderTrmnlCachedImage()) {
+    renderDefaultSleepScreen();
   }
 }
 

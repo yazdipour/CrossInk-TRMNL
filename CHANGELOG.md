@@ -2,6 +2,7 @@
 
 ### Added
 
+- TRMNL sleep-screen wallpaper source with configurable server, API key, device ID, and orientation.
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
@@ -49,6 +50,7 @@
 
 ### Fixed
 
+- TRMNL remains the selected lock screen when inactivity sleep triggers, even if Quick Resume after timeout is enabled.
 - Book menu tab navigation, popup scrolling, customized Reading Stats hints, and short button presses after low-power mode now work reliably.
 - Sleep screens now honor the current orientation, avoid X4 transition flashes, fall back to a valid wallpaper when needed, and handle low-memory image decoding without rebooting.
 - Choosing Set Cover uses the selected image in place, and Home no longer repeatedly generates missing EPUB covers.
@@ -212,6 +214,7 @@
 - File Browser long-press folder action for choosing a custom sleep-image folder instead of only `/.sleep` or `/sleep`.
 - Expanded X3 Reading Stats, including streaks, time charts, editable dates, all-time backups, reset controls, an idle-time threshold, and the `Minimal Stats` sleep screen.
 - `Reset Reading Pace` in the EPUB reader menu when Time Left is enabled, for clearing only the time-left pace estimate while keeping book reading stats.
+- Added TRMNL as a sleep-screen wallpaper source with configurable server, API key, device ID, and orientation.
 
 ### Changed
 

@@ -54,6 +54,7 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
     static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::DASHBOARD_SLEEP),
+    static_cast<uint8_t>(CrossPointSettings::TRMNL),
 };
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
     sizeof(SLEEP_SCREEN_STORAGE_ORDER) / sizeof(SLEEP_SCREEN_STORAGE_ORDER[0]);
@@ -305,6 +306,12 @@ uint8_t CrossPointSettings::sleepScreenModeToStorage(const uint8_t mode) {
     }
   }
   return 0;
+}
+
+bool CrossPointSettings::shouldUseQuickResumeSleepScreen(const bool fromTimeout) const {
+  if (sleepScreen == QUICK_RESUME) return true;
+  if (!fromTimeout || sleepScreen == TRMNL) return false;
+  return quickResumeSleepScreen == QUICK_RESUME_AFTER_TIMEOUT;
 }
 
 uint8_t CrossPointSettings::legacyLineSpacingToPercent(const uint8_t legacyValue, const uint8_t fontFamily,

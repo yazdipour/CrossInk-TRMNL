@@ -1,3 +1,14 @@
+# CrossXT - Yet Another Crosspoint Fork
+
+### Main features of this fork:
+- TRMNL Lock Screen (I used https://github.com/yazdipour/byos_next as Server)
+- OPDS Downloads going to specified directory instead of root
+> [Branch of CrossInk](https://github.com/yazdipour/CrossXT/tree/development)
+> [Branch of CPR-vCodex](https://github.com/yazdipour/CrossXT/tree/main-vcodex)
+
+![CrossXT with TRMNL Lock Screen](https://github.com/yazdipour/byos_next/raw/main/docs/screenshots/xteink-x4.jpg)
+
+## CrossInk
 
 This directory is intended for PlatformIO Test Runner and project tests.
 
@@ -9,6 +20,16 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+TRMNL display parser and display config:
+
+```sh
+test/run_trmnl_display_json_parser_test.sh
+```
+
+This validates the tiny TRMNL `/api/display` response parser and the portable
+TRMNL display orientation sizing used by the sleep screen fetch path. It runs
+on the host with `c++` and does not require PlatformIO or device hardware.
 
 Simulator smoke test:
 - Run `./scripts/run_simulator_smoke_test.py` from the repo root.

@@ -166,10 +166,15 @@ struct Sink {
   size_t downloaded = 0;
   size_t total = 0;
   bool rangeIgnored = false;
+  const HttpDownloader::Header* headers = nullptr;
+  size_t headerCount = 0;
+  size_t maxBytes = 0;
+  bool sizeLimitExceeded = false;
 };
 
 void setRequestHeaders(esp_http_client_handle_t client, const std::string& username, const std::string& password,
-                       size_t resumeOffset, bool sendAuthorization) {
+                       size_t resumeOffset, bool sendAuthorization, const HttpDownloader::Header* headers,
+                       const size_t headerCount) {
   esp_http_client_set_header(client, "User-Agent", "CrossInk-ESP32-" CROSSINK_VERSION);
   esp_http_client_set_header(client, "Connection", "close");
   if (resumeOffset > 0) {
@@ -182,6 +187,11 @@ void setRequestHeaders(esp_http_client_handle_t client, const std::string& usern
     const std::string credentials = username + ":" + password;
     const String header = "Basic " + base64::encode(credentials.c_str());
     esp_http_client_set_header(client, "Authorization", header.c_str());
+  }
+  for (size_t i = 0; i < headerCount; ++i) {
+    if (headers[i].name && headers[i].value) {
+      esp_http_client_set_header(client, headers[i].name, headers[i].value);
+    }
   }
 }
 
@@ -232,6 +242,11 @@ HttpDownloader::DownloadError runGetWolfSsl(const std::string& url, const std::s
       const std::string credentials = username + ":" + password;
       const String encoded = base64::encode(credentials.c_str());
       http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+    }
+    for (size_t i = 0; i < sink.headerCount; ++i) {
+      if (sink.headers[i].name && sink.headers[i].value) {
+        http.addHeader(sink.headers[i].name, sink.headers[i].value);
+      }
     }
 
     LOG_DBG("HTTP", "wolfSSL GET: %s", currentUrl.c_str());
@@ -353,7 +368,7 @@ HttpDownloader::DownloadError runGetDefault(const std::string& url, const std::s
       return HttpDownloader::HTTP_ERROR;
     }
 
-    setRequestHeaders(client, username, password, sink.resumeOffset, sendAuthorization);
+    setRequestHeaders(client, username, password, sink.resumeOffset, sendAuthorization, sink.headers, sink.headerCount);
 
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
@@ -524,22 +539,53 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
-  return fetchUrl(
-      url, [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; }, username,
-      password);
+                              const std::string& password, const Header* headers, const size_t headerCount,
+                              const size_t maxBytes) {
+  DownloadOptions options;
+  options.maxBytes = maxBytes;
+  Sink sink;
+  sink.headers = headers;
+  sink.headerCount = headerCount;
+  sink.maxBytes = maxBytes;
+  sink.write = [&outContent, &sink](const uint8_t* data, size_t len) {
+    if (sink.maxBytes > 0 && sink.downloaded + len > sink.maxBytes) {
+      sink.sizeLimitExceeded = true;
+      return false;
+    }
+    return outContent.write(data, len) == len;
+  };
+  const size_t bufferSize = DEFAULT_DOWNLOAD_BUFFER_SIZE;
+  WifiPowerSaveGuard wifiPowerSaveGuard;
+  (void)wifiPowerSaveGuard;
+  return runGet(url, username, password, sink, bufferSize, options.transport) == OK && !sink.sizeLimitExceeded;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const Header* headers, const size_t headerCount,
+                              const size_t maxBytes) {
   outContent.clear();
-  return fetchUrl(
-      url,
-      [&outContent](const uint8_t* data, size_t len) {
-        outContent.append(reinterpret_cast<const char*>(data), len);
-        return true;
-      },
-      username, password);
+  DownloadOptions options;
+  options.maxBytes = maxBytes;
+  WifiPowerSaveGuard wifiPowerSaveGuard;
+  (void)wifiPowerSaveGuard;
+  Sink sink;
+  sink.headers = headers;
+  sink.headerCount = headerCount;
+  sink.maxBytes = maxBytes;
+  sink.write = [&outContent, &sink](const uint8_t* data, size_t len) {
+    if (sink.maxBytes > 0 && sink.downloaded + len > sink.maxBytes) {
+      sink.sizeLimitExceeded = true;
+      return false;
+    }
+    outContent.append(reinterpret_cast<const char*>(data), len);
+    return true;
+  };
+  const DownloadError result = runGet(url, username, password, sink, DEFAULT_DOWNLOAD_BUFFER_SIZE, options.transport);
+  if (sink.sizeLimitExceeded) {
+    outContent.clear();
+    return false;
+  }
+  return result == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
@@ -562,6 +608,7 @@ HttpDownloader::DownloadError HttpDownloader::streamUrl(const std::string& url, 
   sink.write = onData;
   sink.progress = std::move(progress);
   sink.shouldCancel = std::move(options.shouldCancel);
+  sink.maxBytes = options.maxBytes;
   const size_t bufferSize = options.bufferSize > 0 ? options.bufferSize : DEFAULT_DOWNLOAD_BUFFER_SIZE;
   return runGet(url, username, password, sink, bufferSize, options.transport);
 }
@@ -569,7 +616,8 @@ HttpDownloader::DownloadError HttpDownloader::streamUrl(const std::string& url, 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
-                                                             DownloadOptions options) {
+                                                             DownloadOptions options, const Header* headers,
+                                                             const size_t headerCount) {
   WifiPowerSaveGuard wifiPowerSaveGuard;
   (void)wifiPowerSaveGuard;
 
@@ -592,6 +640,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.shouldCancel = std::move(options.shouldCancel);
   sink.resumeOffset = resumeOffset;
+  sink.headers = headers;
+  sink.headerCount = headerCount;
+  sink.maxBytes = options.maxBytes;
 
   FsFile file;
   bool fileOpen = false;
@@ -613,7 +664,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return fileOpen;
   };
 
-  sink.write = [&](const uint8_t* data, size_t len) { return openOutputFile() && file.write(data, len) == len; };
+  sink.write = [&](const uint8_t* data, size_t len) {
+    if (sink.maxBytes > 0 && sink.downloaded + len > sink.maxBytes) {
+      sink.sizeLimitExceeded = true;
+      return false;
+    }
+    return openOutputFile() && file.write(data, len) == len;
+  };
 
   DownloadError result = runGet(url, username, password, sink, bufferSize, options.transport);
   if (sink.rangeIgnored) {
@@ -626,7 +683,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     sink.resumeOffset = 0;
     sink.downloaded = 0;
     sink.total = 0;
-    sink.write = [&](const uint8_t* data, size_t len) { return openOutputFile() && file.write(data, len) == len; };
+    sink.write = [&](const uint8_t* data, size_t len) {
+      if (sink.maxBytes > 0 && sink.downloaded + len > sink.maxBytes) {
+        sink.sizeLimitExceeded = true;
+        return false;
+      }
+      return openOutputFile() && file.write(data, len) == len;
+    };
     result = runGet(url, username, password, sink, bufferSize, options.transport);
   }
 
@@ -635,6 +698,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     file.close();
   }
 
+  if (sink.sizeLimitExceeded) result = SIZE_LIMIT_EXCEEDED;
   if (result != OK) {
     LOG_ERR("HTTP", "Transfer failed: error=%d downloaded=%zu expected=%zu preservePartial=%d resumePartial=%d",
             static_cast<int>(result), sink.downloaded, sink.total, options.preservePartial, options.resumePartial);
