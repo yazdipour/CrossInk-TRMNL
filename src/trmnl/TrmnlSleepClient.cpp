@@ -13,22 +13,20 @@
 #include "util/UrlUtils.h"
 
 namespace {
-const WifiCredential* getTrmnlWifiCredential() {
-  WIFI_STORE.loadFromFile();
-  const std::string& lastSsid = WIFI_STORE.getLastConnectedSsid();
+std::optional<WifiCredential> getTrmnlWifiCredential() {
+  const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
   if (!lastSsid.empty()) {
     LOG_INF("TRM", "Trying last used WiFi: %s", lastSsid.c_str());
-    if (const auto* cred = WIFI_STORE.findCredential(lastSsid)) {
+    if (auto cred = WIFI_STORE.findCredential(lastSsid)) {
       return cred;
     }
   }
-  const auto& credentials = WIFI_STORE.getCredentials();
-  if (!credentials.empty()) {
-    LOG_INF("TRM", "Trying first available WiFi: %s", credentials.front().ssid.c_str());
-    return &credentials.front();
+  if (auto cred = WIFI_STORE.getCredentialAt(0)) {
+    LOG_INF("TRM", "Trying first available WiFi: %s", cred->ssid.c_str());
+    return cred;
   }
   LOG_ERR("TRM", "No WiFi credentials found");
-  return nullptr;
+  return std::nullopt;
 }
 
 bool validateBmpFile(const std::string& path) {
@@ -48,7 +46,7 @@ bool TrmnlSleepClient::hasConfig(const Config& config) {
 }
 
 bool TrmnlSleepClient::connectWifi() {
-  const auto* cred = getTrmnlWifiCredential();
+  const auto cred = getTrmnlWifiCredential();
   if (!cred || cred->ssid.empty()) {
     return false;
   }

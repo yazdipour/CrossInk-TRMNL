@@ -1,3 +1,15 @@
+# CrossXT - Yet Another Crosspoint Fork
+
+> [Fork based on CrossInk](https://github.com/yazdipour/CrossXT/tree/development)
+> [Fork based on CPR-vCodex](https://github.com/yazdipour/CrossXT/tree/main-vcodex)
+  - Karakeep Read Later App
+  - TRMNL Lock Screen (I used https://github.com/yazdipour/byos_next as Server)
+  - How to install CrossXT? Grab the latest release from [Releases](https://github.com/yazdipour/CrossXT/releases)
+
+![CrossXT with TRMNL Lock Screen](https://github.com/yazdipour/byos_next/raw/main/docs/screenshots/xteink-x4.jpg)
+
+---
+
 > **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
 
 ### Supported Devices
